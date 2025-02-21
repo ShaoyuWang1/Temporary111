@@ -10,11 +10,17 @@ import numpy as np
 
 import torch.nn.functional as F
 
+# Set device to MPS if available, otherwise fallback to CPU
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+print(f"Using device: {device}")
+
+
 # Define the transformation to normalize the data
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
 
 # Load the MNIST dataset
 train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+
 test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=64, shuffle=True)
@@ -33,11 +39,13 @@ input_size = 28 * 28  # MNIST images are 28x28 pixels
 # Get a batch of training data
 dataiter = iter(train_loader)
 images, labels = next(dataiter)
+images, labels = images.to(device), labels.to(device)
+
 
 # Function to show an image
 def imshow(img, ax):
     img = img / 2 + 0.5  # unnormalize
-    npimg = img.numpy()
+    npimg = img.cpu().numpy()
     ax.imshow(np.squeeze(npimg), cmap="gray")  # Fix for grayscale images
 
 # Plot 9 images in a 3x3 grid
@@ -78,13 +86,13 @@ class Logger:
         
     def plot(self):
         plt.figure(figsize=(12, 4))
-        plt.subplot(1, 2, 1)
+        plt.subplot(1, 2, 1)        
         plt.plot(self.train_loss['epoch'], self.train_loss['value'], label='Train')
         plt.plot(self.test_loss['epoch'], self.test_loss['value'], label='Test')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
-        
+
         plt.subplot(1, 2, 2)
         plt.plot(self.train_accuracy['epoch'], self.train_accuracy['value'], label='Train')
         plt.plot(self.test_accuracy['epoch'], self.test_accuracy['value'], label='Test')
@@ -111,6 +119,7 @@ def test(epoch, mode):
     # Get a batch of test data
     dataiter = iter(test_loader)
     images, labels = next(dataiter)
+    images, labels = images.to(device), labels.to(device)
 
     # Plot 9 images in a 3x3 grid
     fig, axes = plt.subplots(3, 3, figsize=(8, 8))
@@ -128,6 +137,7 @@ def test(epoch, mode):
         with torch.no_grad():
             # output = model(image)
             predicted, loss = model.predict(image, label)
+            loss = loss.item()
             ax.set_title(f'Real: {labels[i].item()}, Pred: {predicted.item()}')
 
     plt.tight_layout()
@@ -141,6 +151,7 @@ def test(epoch, mode):
         total = 0
         loss = 0
         for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
             images = images.view(-1, 28*28)
             predicted, loss_batch = model.predict(images, labels)
             total += labels.size(0)
@@ -148,7 +159,7 @@ def test(epoch, mode):
             loss += loss_batch.item() * labels.size(0)
         print(f'Accuracy of the model on the 10000 test images: {100 * correct / total} %')
         
-    return correct / total, loss / total
+    return correct/total, loss/total
 
 
 
@@ -174,7 +185,7 @@ if MODE == 'linear':
 
         
         
-    model = LinearRegression(input_size, 1)
+    model = LinearRegression(input_size, 1).to(device)
 
     # Loss function
     def square_error(outputs, labels):
@@ -191,6 +202,7 @@ if MODE == 'linear':
     num_epochs = 100
     for epoch in range(num_epochs):
         for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
             images = images.view(-1, 28*28)  # Flatten the images
             
             # Forward pass
@@ -257,9 +269,9 @@ if MODE in ['softmax', 'softmax_mlp']:
             
         
     if MODE == 'softmax':
-        model = SoftmaxLinear(input_size, num_classes)
+        model = SoftmaxLinear(input_size, num_classes).to(device)
     elif MODE == 'softmax_mlp':
-        model = SoftmaxMLP(input_size, num_classes)
+        model = SoftmaxMLP(input_size, num_classes).to(device)
         
     # Compute the loss manually
     def softmax_likelihood(logits, labels):
@@ -287,6 +299,7 @@ if MODE in ['softmax', 'softmax_mlp']:
     num_epochs = 100
     for epoch in range(num_epochs):
         for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
             images = images.view(-1, 28*28)  # Flatten the images
             
             # Forward pass
